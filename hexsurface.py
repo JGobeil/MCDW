@@ -60,6 +60,7 @@ class HexagonalSurface:
         self.sti = None
         self.nni = None
         self.nnr = None
+        self.ste = None
 
         if load and self.load():
             pass
@@ -222,6 +223,10 @@ class HexagonalSurface:
         t = Timing('Updating sites info (n=%g)' % self.stlen)
         self.stidx = [np.argwhere(self.sts == i)
                       for i in range(len(self.sites))]
+        self.ste = np.zeros(self.stx.shape)
+        for i, idx in enumerate(self.stidx):
+            self.ste[idx] = self.sites[i].energy
+
         t.finished()
 
     def cut_st(self, radius):
