@@ -14,7 +14,21 @@ from surfacegeo import calculate_nn
 surface_filename = 'surface'
 
 
-class HexagonalSurface:
+class SurfaceGeometry:
+    """ Define the surface geometry (rectangular, hexagon, ...) and
+    its periodicity.  """
+
+    @property
+    def init_grid_size(self) -> (int, int):
+        return (10, 10)
+
+
+
+
+class HexagonalLattice:
+    default_surface_db_dir = "surface_db"
+
+    """ Hexagonal surface lattice. """
     def __init__(self,
                  a: float,  # scaling
                  radius: float,  # size of the hexagon
@@ -31,11 +45,14 @@ class HexagonalSurface:
         # first use a radius that is that big before cutting
         uc_over = 5
 
+        # use 'surface_db' as default load_and_save_dir
         if load_and_save_dir is None:
-            self.wd = os.getcwd()
+            self.wd = HexagonalLattice.default_surface_db_dir
         else:
             self.wd = load_and_save_dir
-            os.makedirs(self.wd, exist_ok=True)
+
+        # create the directory if it doesn't exist
+        os.makedirs(self.wd, exist_ok=True)
 
         # hexagonal specifications
         grid = (np.sqrt(3.)/2, 1)
@@ -44,25 +61,26 @@ class HexagonalSurface:
             [],  # no modification for columns
         ]
 
-        self.a = a
-        self.radius = radius
-        self.nn_radius = nn_radius
-        self.periodic = periodic
-        self.sites = sites
+        self.a = a  # scaling
+        self.radius = radius  # radius of the hexagon
+        self.nn_radius = nn_radius  # radius of the nearest neighbors search
+        self.periodic = periodic  # if the surface is periodic
+        self.sites = sites  # sites specifications
 
-        self.ucx = None
-        self.ucy = None
-        self.uci = None
-        self.ucj = None
-        self.stx = None
-        self.sty = None
-        self.sts = None
-        self.sti = None
-        self.nni = None
-        self.nnr = None
-        self.ste = None
+        self.ucx = None  # unitcells x position
+        self.ucy = None  # unitcells y position
+        self.uci = None  # unitcells i index (rows)
+        self.ucj = None  # unitcells j index (cols)
+        self.stx = None  # sites x position
+        self.sty = None  # sites y postions
+        self.sts = None  # sites index in site specifications
+        self.sti = None  # sites index
+        self.nni = None  # sites nearest neighbors index
+        self.nnr = None  # sites nearest neighbors distance
+        self.ste = None  # sites energy
 
         if load and self.load():
+            # surface loaded from file
             pass
         else:
             # calculate the x, y, i and j of the unit cells

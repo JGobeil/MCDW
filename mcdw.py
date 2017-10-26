@@ -7,7 +7,8 @@ import numexpr as ne
 import pandas as pd
 
 from timing import Timing
-from hexsurface import HexagonalSurface
+from timing import TimingWithBatchEstimator
+from hexsurface import HexagonalLattice
 from sites import SitesGroup
 
 
@@ -98,11 +99,8 @@ class MonteCarloSimulation:
         return self.atoms_on_surface / len(self.occ)
 
     def run(self):
-        t = Timing('Running MC',
-                   total_steps=self.max_laps,
-                   batch_size=1,
-                   )
-        while t.batch_size > 0:
+        t = Timing('Running MC', nbsteps=self.max_laps)
+        while t.done < self.max_laps:
             self.lap = t.done
             self.temperature = self.temperature_func(self.lap)
             self.run_lap()
@@ -373,9 +371,9 @@ def Paper1_prepare(surface, show=False):
 if __name__ == '__main__':
     np.random.seed(201)
 
-    s = HexagonalSurface(
+    s = HexagonalLattice(
         a=0.362 / np.sqrt(2) / 2,
-        radius=25,
+        radius=11,
         nn_radius=4,
         sites=SitesGroup.fcc_hcp_111(),
         load=True,

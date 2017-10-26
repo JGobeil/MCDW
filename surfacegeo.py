@@ -1,6 +1,7 @@
 import numpy as np
 import numexpr as ne
 from timing import Timing
+from timing import TimingWithBatchEstimator
 
 
 def create_grid(nx, ny, grid_def, corrections, center=True):
@@ -122,17 +123,17 @@ def geometric_cut_mask_old(px, py, radius, side=6, offangle=np.pi/2):
 
 def calculate_nn(stx, sty, nn_radius, idx_list=None,
                  time_per_batch=10,
-                 time_before_print=5):
+                 time_before_print=0):
     n = len(stx)
 
     nni = [None] * n  # indices of nn
     nnr = [None] * n  # distances of nn
 
-    t = Timing(name='NN calculation',
-               total_steps=n,
-               target_batch_time=time_per_batch,
-               time_before_print=time_before_print
-               )
+    t = TimingWithBatchEstimator(name='NN calculation',
+                                 nbsteps=n,
+                                 target_batch_time=time_per_batch,
+                                 time_before_first_print=time_before_print
+                                 )
 
     outr = np.zeros(n, dtype=float)
     outless = np.zeros(n, dtype=bool)
@@ -161,6 +162,6 @@ def calculate_nn(stx, sty, nn_radius, idx_list=None,
                 nni[i] = idx_list[nn_in_id[argsort]]
             nnr[i] = nn_in_radius[argsort]
 
-        t.tic()
+        print(t.tic())
     t.finished()
     return np.array(nni), np.array(nnr)
