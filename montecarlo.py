@@ -9,6 +9,7 @@ from timing import Timing
 from timing import TimingWithBatchEstimator
 from hexsurface import HexagonalDirectPosition
 from sites import SitesGroup
+from utils import sizeof_fmt
 
 
 class MonteCarloSimulation:
@@ -16,16 +17,19 @@ class MonteCarloSimulation:
                  surface,
                  max_laps,
                  steps_per_lap,
+                 moves_per_step,
                  potential_func,
                  potential_params,
                  temperature_func,
                  max_coverage,
                  output_path,
                  precalculate_potential_func=None,
+                 create_image_queue=None
                  ):
 
         os.makedirs(output_path, exist_ok=True)
 
+        self.create_image_queue = create_image_queue
         self.surface = surface
         self.V = potential_func
         self.V_params = potential_params
@@ -44,6 +48,7 @@ class MonteCarloSimulation:
 
         self.max_laps = max_laps
         self.steps_per_lap = steps_per_lap
+        self.moves_per_step = moves_per_step
         self.target_coverage = max_coverage
         self.outpath = output_path
 
@@ -72,6 +77,12 @@ class MonteCarloSimulation:
         self.landing_prob = np.zeros(self.stlen, dtype=float)
         for i, s in enumerate(self.surface.sites):
             self.landing_prob[self.surface.stidx[i]] = s.prob
+
+        # caching variable
+        self._nni = np.zeros(4, dtype=int)
+        self._occ = np.zeros(4, dtype=bool)
+        self._nne = np.zeros(4, dtype=float)
+        self._p = np.zeros(4, dtype=float)
 
     @property
     def lap_info(self):
@@ -107,23 +118,30 @@ class MonteCarloSimulation:
 
     def run(self):
         t = Timing('Running MC', nbsteps=self.max_laps)
+        self.save_init_state()
         while t.done < self.max_laps:
             self.lap = t.done
             self.temperature = self.temperature_func(self.lap)
             self.run_lap()
+            self.save_state()
+            if self.create_image_queue is not None:
+                self.create_image_queue.put(self.lap)
             t.tic()
+        self.save_state()
         t.finished()
+
+        if self.create_image_queue is not None:
+            self.create_image_queue.put('QUIT')
 
     def run_lap(self):
         N = self.steps_per_lap
         for step in range(N):
-            if self.coverage < self.target_coverage and step < (N / 10):
+            if self.coverage < self.target_coverage:
                 self.add_atom()
-
-            else:
+            for i in range(self.moves_per_step*self.atoms_on_surface):
                 self.move_atom()
 
-        self.show(savefig=self.lap)
+        #self.show(savefig=self.lap)
 
     def add_atom(self):
 
@@ -157,36 +175,44 @@ class MonteCarloSimulation:
         #prob /= prob[-1]
 
         #i = np.searchsorted(prob, np.random.uniform())
-        i = (np.arange(self.stlen)[self.occ])[np.random.randint(0, self.atoms_on_surface)]
-
-        nnr = self.surface.nnr[i]
-        nni = self.surface.nni[i]
-
-        occ = self.occ[nni]
-
-        not_occ = np.logical_not(occ) & (nnr < 0.3)
-        not_occ_i = nni[not_occ]
-        not_occ_r = nnr[not_occ]
-
-        prob = np.cumsum(1/not_occ_r)
-        prob /= prob[-1]
-
-        j = not_occ_i[np.searchsorted(prob, np.random.uniform())]
-
+        i = np.random.choice(self.surface.sti[self.occ])
         self.occ[i] = False
+        self._nni[0] = i
+        self._nni[1:] = self.surface.nni[i][:3]
+        self._nne[:] = [0 if self.occ[ii] else self.get_energy(ii)
+                        for ii in self._nni]
+
+        self._occ[:] = self.occ[self._nni]
+        self._p[:] = np.exp(-self._nne * self.boltzmann_T)
+        self._p[self._occ] = 0
+        self._p[:] /= np.sum(self._p)
+
+        j = np.random.choice(self._nni, p=self._p)
+        #j = not_occ_i[np.searchsorted(prob, np.random.uniform())]
+
+
+        if self.occ[j]:
+            print('!!!!Moving to an occupied position!!!!')
+
         self.occ[j] = True
 
-        self.update_energy(nni)
+
+        self.update_energy(self._nni)
         self.update_energy([i,j])
 
-        if self.accept():
-            self.keep_modification(nni)
-            self.keep_modification([i,j])
-            self.move_accepted += 1
-        else:
-            self.reverse_modification(nni)
-            self.reverse_modification([i,j])
-            self.move_rejected += 1
+        self.keep_modification(self._nni)
+        self.keep_modification([i,j])
+        self.move_accepted += 1
+
+        #
+        #if self.accept():
+        #    self.keep_modification(nni)
+        #    self.keep_modification([i,j])
+        #    self.move_accepted += 1
+        #else:
+        #    self.reverse_modification(nni)
+        #    self.reverse_modification([i,j])
+        #    self.move_rejected += 1
 
     def prepopulate(self, fraction):
         t = Timing('Prepopulating (%g%%)' % (fraction * 100))
@@ -204,7 +230,6 @@ class MonteCarloSimulation:
     def prepopulate_sites(self, i):
         s = self.surface.sites[i]
         t = Timing('Prepopulating sites %s' % s.name)
-        total = self.stlen
         all = np.arange(total)
         c = self.surface.stidx[i]
         t.prt("Prepopulating %i sites on %i." % (len(c), total ))
@@ -250,10 +275,12 @@ class MonteCarloSimulation:
 
         # calculate energy for occupied sites
         for i in idx[occ]:
-            nni = self.surface.nni[i]
-            self.energies[i] = self.V(i, self.occ[nni], self.surface,
-                                      **self.V_params)
+            self.energies[i] = self.get_energy(i)
         self.energy = np.sum(self.energies)
+
+    def get_energy(self, i):
+        nni = self.surface.nni[i]
+        return self.V(i, self.occ[nni], self.surface, **self.V_params)
 
     def keep_modification(self, indices):
         self.previous_energies[indices] = self.energies[indices]
@@ -272,34 +299,64 @@ class MonteCarloSimulation:
         else:
             return np.random.uniform() < np.exp(-(dE*self.boltzmann_T))
 
-    def show(self, savefig=None, show=False):
+    def save_init_state(self):
+        fn = os.path.join(self.outpath, "init.npz")
+        #t = Timing('Saving initial state to %s' % fn)
+        np.savez_compressed(fn,
+                            sites_x=self.surface.stx,
+                            sites_y=self.surface.sty,
+                            sites_name=[self.surface.sites[i].name
+                                        for i in self.surface.sts],
+                            a=self.surface.a,
+                            )
+
+        #t.prt('File saved ( %s )' % sizeof_fmt(fn))
+        #t.finished()
+
+    def save_state(self):
+        fn = os.path.join(self.outpath, "occ_%.10d.npy" % self.lap)
+        #t = Timing('Saving to %s' % fn)
+        np.save(fn,self.occ)
+        #t.prt('File saved ( %s )' % sizeof_fmt(fn))
+        #t.finished()
+
+    def show(self,
+             savefig=None,
+             show=False,
+             symbol=None,
+             symbol_scale=0.9,
+             ):
         #plt.scatter(
         #    self.sites.uc.x,
         #    self.sites.uc.y,
         #    30, 'black',  marker=(6, 0, 0))
 
+        if symbol is None:
+            symbol = 'hexagon'
+
         fig = plt.figure(figsize=(10,10))
         ax = plt.subplot(111)
 
-        for i, stidx in enumerate(self.surface.stidx):
-            #idx = stidx[self.occ[stidx]]
-            #plt.scatter(
-            #    self.surface.stx[idx],
-            #    self.surface.sty[idx],
-            #    s=10, c=self.surface.sites[i].color, marker='.')
-            for idx in stidx[self.occ[stidx]]:
-                #print((self.surface.stx[idx], self.surface.stx[idx]))
-                #print(self.surface.a)
-
-                ax.add_patch(
-                        RegularPolygon(
-                            (self.surface.stx[idx], self.surface.sty[idx]), # (x,y)
-                            6, # number of vertices
-                            self.surface.a*0.9, # radius
-                            #orientation=np.pi/6,
-                            color=self.surface.sites[i].color,
+        for i in reversed(range(len(self.surface.stidx))):
+            stidx = self.surface.stidx[i]
+            if symbol == 'scatter':
+                idx = stidx[self.occ[stidx]]
+                plt.scatter(
+                    self.surface.stx[idx],
+                    self.surface.sty[idx],
+                    s=10, c=self.surface.sites[i].color, marker='.')
+            else:
+                if symbol == 'hexagon':
+                    for idx in stidx[self.occ[stidx]]:
+                        ax.add_patch(
+                            RegularPolygon(
+                                (self.surface.stx[idx], self.surface.sty[idx]),
+                                6, # number of vertices
+                                self.surface.a*symbol_scale, # radius
+                                #orientation=np.pi/6,
+                                color=self.surface.sites[i].color,
+                            )
                         )
-                    )
 
 
         axmin = min((self.surface.stx.min(), self.surface.sty.min())) * 1.05

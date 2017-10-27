@@ -16,13 +16,15 @@ class SitesGroup(list):
         fcc_conf = dict(
             rel_pos=(1/np.sqrt(3.), 0,),
             prob=1,
-            energy=-1.803,
+            #energy=-1.803,
+            energy=-0.020,
         )
 
         hcp_conf = dict(
             rel_pos=(.5/np.sqrt(3.), -0.5),
             prob=1,
-            energy=-1.790,
+            #energy=-1.790,
+            energy=-0.010,
         )
 
         fcc_name = ['fcc1', 'fcc2', 'fcc3']

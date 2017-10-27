@@ -9,20 +9,9 @@ from surfacegeo import create_grid
 from surfacegeo import calculate_sites
 from surfacegeo import geometric_cut_mask
 from surfacegeo import calculate_nn
+from utils import sizeof_fmt
 
 surface_filename = 'surface'
-
-class HexLattice:
-    def __init__(self,
-                 r: float,  # 1/2 distance between 2 chlorines,
-                 cells_in_x: int, # number of 'unit cell' in x
-                 cell_in_y: int, # number of 'unit cell' in y
-                 ):
-        xy = np.array((cell_in_y, cell_in_y, 12, 2))
-
-
-
-
 
 class HexagonalDirectPosition:
     default_surface_db_dir = "surface_db"
@@ -345,11 +334,3 @@ class HexagonalDirectPosition:
         plt.show()
 
 
-def sizeof_fmt(fn, suffix='B'):
-    """ From https://stackoverflow.com/questions/1094841 """
-    num = os.path.getsize(fn)
-    for unit in ['', 'Ki', 'Mi', 'Gi', 'Ti', 'Pi', 'Ei', 'Zi']:
-        if abs(num) < 1024.0:
-            return "%3.1f%s%s" % (num, unit, suffix)
-        num /= 1024.0
-    return "%.1f%s%s" % (num, 'Yi', suffix)

@@ -162,6 +162,6 @@ def calculate_nn(stx, sty, nn_radius, idx_list=None,
                 nni[i] = idx_list[nn_in_id[argsort]]
             nnr[i] = nn_in_radius[argsort]
 
-        print(t.tic())
+        t.tic()
     t.finished()
     return np.array(nni), np.array(nnr)

@@ -2,6 +2,12 @@
 
 Code for Monte Carlo simulations of domain walls formation on Cu2N/Cu(111).
 
-For now, the code need a lot of refactoring, cleaning and documentations. I will clean, correct and organise in the next commits.
+See file run1/mcdw.py for example on how to run the code.
 
-Hello Jan. This is the code that I wrote. It's a quickly written code and need to be clean up and organise better.
+## Features
+
+- Create/save/load surface configurations automatically
+- Nearest neighbors pre calculation and save/load
+- Separate process for images creation
+- Other stuff
+
