@@ -27,16 +27,16 @@ class HexLattice:
 class HexagonalDirectPosition:
     default_surface_db_dir = "surface_db"
 
-    savelist = ['ucx',
-                'ucy',
-                'uci',
-                'ucj',
-                'stx',
-                'sty',
-                'sts',
-                'sti',
-                'nni',
-                'nnr',
+    savelist = ['ucx',  # unit cell x position
+                'ucy',  # unit cell y position
+                'uci',  # unit cell i index
+                'ucj',  # unit cell j index
+                'stx',  # sites x position
+                'sty',  # sites y position
+                'sts',  # sites index in sites specification list
+                'sti',  # sites index in big list
+                'nni',  # nn index
+                'nnr',  # nn distance
                 ]
 
     """ Hexagonal surface lattice. """
@@ -88,6 +88,7 @@ class HexagonalDirectPosition:
         self.sti = None  # sites index
         self.nni = None  # sites nearest neighbors index
         self.nnr = None  # sites nearest neighbors distance
+        self.nna = None  # sites nearest neighbors angle
         self.ste = None  # sites energy
 
         if load and self.load():
@@ -131,7 +132,7 @@ class HexagonalDirectPosition:
 
         t = Timing('Saving to %s' % path)
         np.savez_compressed(fn, **{key: getattr(self, key)
-            for key in self.__class__.savelist})
+            for key in self.savelist})
         t.prt('File saved ( %s )' % sizeof_fmt(fn))
         t.finished()
 
@@ -143,7 +144,7 @@ class HexagonalDirectPosition:
         t = Timing('Saving json to %s' % fn)
         with open(fn, 'w') as f:
             json.dump({key: getattr(self, key).tolist()
-                for key in self.__class__.savelist},
+                for key in self.savelist},
                 f)
         t.prt('File saved ( %s )' % sizeof_fmt(fn))
         t.finished()
@@ -156,8 +157,16 @@ class HexagonalDirectPosition:
         try:
             with np.load(fn) as loaded:
                 t.prt('File opened. Reading.')
-                for key in self.__class__.savelist:
+
+                # checking for missing field
+                mf =[key for key in self.savelist if key not in loaded]
+                if len(mf) > 0:
+                    t.finished('Missing field %s in file.' % mf)
+                    return False
+
+                for key in self.savelist:
                     setattr(self, key, loaded[key])
+
             self.update_sites_infos()
             t.finished('File loaded.')
             return True
