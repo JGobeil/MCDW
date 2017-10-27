@@ -6,11 +6,13 @@ import matplotlib.pyplot as plt
 import numexpr as ne
 import pandas as pd
 
+import sys
+sys.path.append('..')
 from timing import Timing
 from timing import TimingWithBatchEstimator
+from montecarlo import MonteCarloSimulation
 from hexsurface import HexagonalDirectPosition
 from sites import SitesGroup
-
 
 
 def LJ_ne(i, mask, surface, epsilon, r_m):
@@ -94,12 +96,12 @@ if __name__ == '__main__':
 
     s = HexagonalDirectPosition(
         a=0.362 / np.sqrt(2) / 2,
-        radius=11,
+        radius=30,
         nn_radius=4,
         sites=SitesGroup.fcc_hcp_111(),
         load=True,
         save=True,
-        load_and_save_dir='sdb'
+        load_and_save_dir='../sdb'
         )
 
     #s.save_json()
@@ -108,12 +110,12 @@ if __name__ == '__main__':
         surface=s,
         max_laps=20,
         steps_per_lap=1000,
-        potential=Paper1,
+        potential_func=Paper1,
         potential_params={},
-        precalculate_potential=Paper1_prepare,
+        precalculate_potential_func=Paper1_prepare,
         temperature_func=lambda l: 300 - 0.1*l,
-        target_coverage=0,
-        outpath='test3',
+        max_coverage=0.15,
+        output_path='img',
     )
 
     mc.prepopulate(0.1)

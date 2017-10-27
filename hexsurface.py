@@ -10,23 +10,34 @@ from surfacegeo import calculate_sites
 from surfacegeo import geometric_cut_mask
 from surfacegeo import calculate_nn
 
-
 surface_filename = 'surface'
 
-
-class SurfaceGeometry:
-    """ Define the surface geometry (rectangular, hexagon, ...) and
-    its periodicity.  """
-
-    @property
-    def init_grid_size(self) -> (int, int):
-        return (10, 10)
-
+class HexLattice:
+    def __init__(self,
+                 r: float,  # 1/2 distance between 2 chlorines,
+                 cells_in_x: int, # number of 'unit cell' in x
+                 cell_in_y: int, # number of 'unit cell' in y
+                 ):
+        xy = np.array((cell_in_y, cell_in_y, 12, 2))
 
 
 
-class HexagonalLattice:
+
+
+class HexagonalDirectPosition:
     default_surface_db_dir = "surface_db"
+
+    savelist = ['ucx',
+                'ucy',
+                'uci',
+                'ucj',
+                'stx',
+                'sty',
+                'sts',
+                'sti',
+                'nni',
+                'nnr',
+                ]
 
     """ Hexagonal surface lattice. """
     def __init__(self,
@@ -47,7 +58,7 @@ class HexagonalLattice:
 
         # use 'surface_db' as default load_and_save_dir
         if load_and_save_dir is None:
-            self.wd = HexagonalLattice.default_surface_db_dir
+            self.wd = HexagonalDirectPosition.default_surface_db_dir
         else:
             self.wd = load_and_save_dir
 
@@ -119,20 +130,8 @@ class HexagonalLattice:
         fn = os.path.join(path, surface_filename) + '.npz'
 
         t = Timing('Saving to %s' % path)
-        np.savez_compressed(
-            fn,
-            **{'ucx': self.ucx,
-               'ucy': self.ucy,
-               'uci': self.uci,
-               'ucj': self.ucj,
-               'stx': self.stx,
-               'sty': self.sty,
-               'sts': self.sts,
-               'sti': self.sti,
-               'nni': self.nni,
-               'nnr': self.nnr,
-               }
-        )
+        np.savez_compressed(fn, **{key: getattr(self, key)
+            for key in self.__class__.savelist})
         t.prt('File saved ( %s )' % sizeof_fmt(fn))
         t.finished()
 
@@ -143,20 +142,9 @@ class HexagonalLattice:
 
         t = Timing('Saving json to %s' % fn)
         with open(fn, 'w') as f:
-            json.dump(
-                {'ucx': self.ucx.tolist(),
-                 'ucy': self.ucy.tolist(),
-                 'uci': self.uci.tolist(),
-                 'ucj': self.ucj.tolist(),
-                 'stx': self.stx.tolist(),
-                 'sty': self.sty.tolist(),
-                 'sts': self.sts.tolist(),
-                 'sti': self.sti.tolist(),
-                 'nni': self.nni.tolist(),
-                 'nnr': self.nnr.tolist(),
-                 },
-                f
-            )
+            json.dump({key: getattr(self, key).tolist()
+                for key in self.__class__.savelist},
+                f)
         t.prt('File saved ( %s )' % sizeof_fmt(fn))
         t.finished()
 
@@ -168,23 +156,13 @@ class HexagonalLattice:
         try:
             with np.load(fn) as loaded:
                 t.prt('File opened. Reading.')
-                self.ucx = loaded['ucx']
-                self.ucy = loaded['ucy']
-                self.uci = loaded['uci']
-                self.ucj = loaded['ucj']
-
-                self.stx = loaded['stx']
-                self.sty = loaded['sty']
-                self.sts = loaded['sts']
-                self.sti = loaded['sti']
-
-                self.nni = loaded['nni']
-                self.nnr = loaded['nnr']
+                for key in self.__class__.savelist:
+                    setattr(self, key, loaded[key])
             self.update_sites_infos()
             t.finished('File loaded.')
             return True
         except FileNotFoundError:
-            t.finished('File not found.')
+            t.finished('File not found or invalid.')
             return False
         except Exception as e:
             t.finished(e)
@@ -200,6 +178,7 @@ class HexagonalLattice:
 
     @property
     def id_str(self):
+        """ Unique identification"""
         return ('Hex-P' if self.periodic else 'Hex') + '-'.join([
             'R%g' % self.radius,
             'NN%g' % self.nn_radius,
@@ -289,6 +268,7 @@ class HexagonalLattice:
          self.nnr) = calculate_nn(self.stx, self.sty, nn_radius, self.sti)
 
     def uniformize_nn(self):
+        """ Cut the NN list of all atoms to the same lenght """
         t = Timing('Uniformizing the number of NN')
 
         nn_len = np.array([nnr.size for nnr in self.nnr])
