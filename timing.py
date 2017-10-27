@@ -251,8 +251,6 @@ class TimingWithBatchEstimator(Timing):
         if self.nbsteps is not None and self.batch_size > self.todo:
             self.batchs[-1] = self.todo
 
-        print(est, self.todo, self.batch_size)
-
         stat = self.stat
         stat.update(**kwargs)
 
