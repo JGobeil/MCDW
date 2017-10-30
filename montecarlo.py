@@ -110,7 +110,8 @@ class MonteCarloSimulation:
 
     @property
     def atoms_on_surface(self):
-        return self.add_prepopulated + self.add_accepted
+        #return self.add_prepopulated + self.add_accepted
+        return np.count_nonzero(self.occ)
 
     @property
     def coverage(self):
@@ -145,30 +146,24 @@ class MonteCarloSimulation:
 
     def add_atom(self):
 
-        not_occ = np.logical_not(self.occ)
-        prob = np.cumsum(self.landing_prob[not_occ])
-        prob /= prob[-1]
-
-        i = np.searchsorted(prob, np.random.uniform())
-        i = np.arange(self.stlen)[not_occ][i]
-
-        nni = self.surface.nni[i]
+        nbtry = self.surface.stlen
+        add_success = False
+        not_occ_i = self.surface.sti[np.logical_not(self.occ)]
+        for n in range(nbtry):
+            i = np.random.choice(not_occ_i)
+            nni = self.surface.nni[i]
+            if not np.any(self.occ[nni[:9]]):
+                add_success = True
+                break
+        if not add_success:
+            print("!!! %d try to add !!!" % nbtry)
 
         if self.occ[i]:
-            print(i, "already occupied")
+            print("!!! Trying to add in an already occupied position !!!")
 
         self.occ[i] = True
         self.update_energy(nni)
         self.update_energy([i,])
-
-        if self.accept():
-            self.keep_modification(nni)
-            self.keep_modification([i,])
-            self.add_accepted += 1
-        else:
-            self.reverse_modification(nni)
-            self.reverse_modification([i,])
-            self.add_rejected += 1
 
     def move_atom(self):
         #prob = np.cumsum(self.occ, dtype=float)
@@ -176,9 +171,16 @@ class MonteCarloSimulation:
 
         #i = np.searchsorted(prob, np.random.uniform())
         i = np.random.choice(self.surface.sti[self.occ])
+        nni = self.surface.nni[i]
+        if (np.all(self.occ[nni[18:24]]) and
+                not np.any(self.occ[nni[:18]]) and
+                self.occ[i]):
+            ## is surrounded
+            return
+
         self.occ[i] = False
         self._nni[0] = i
-        self._nni[1:] = self.surface.nni[i][:3]
+        self._nni[1:] = nni[:3]
         self._nne[:] = [0 if self.occ[ii] else self.get_energy(ii)
                         for ii in self._nni]
 
