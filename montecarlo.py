@@ -37,14 +37,6 @@ class MonteCarloSimulation:
         if precalculate_potential_func is not None:
             precalculate_potential_func(surface, **potential_params)
 
-        #self.stats = pd.DataFrame(
-        #    columns=[
-        #        'temperature',
-        #        'energy',
-        #        'coverage',
-        #    ],
-        #    index=np.arange(max_laps))
-        #})
 
         self.max_laps = max_laps
         self.steps_per_lap = steps_per_lap
@@ -74,6 +66,12 @@ class MonteCarloSimulation:
         self.energy = 0
         self.previous_energy = 0
 
+        self.total_steps = 0
+        self.attempted_moves = 0
+        self.successful_moves = 0
+        self.not_moved_moves = 0
+        self.blocked_moves = 0
+
         self.landing_prob = np.zeros(self.stlen, dtype=float)
         for i, s in enumerate(self.surface.sites):
             self.landing_prob[self.surface.stidx[i]] = s.prob
@@ -86,21 +84,17 @@ class MonteCarloSimulation:
 
     @property
     def lap_info(self):
-        per100 = 100 / self.atoms_on_surface
         return {
-            'Atom on surface (counted)': np.count_nonzero(self.occ),
-            'Atom on surface': self.atoms_on_surface,
-            'Coverage': self.coverage,
-            'Add prepopulated': self.add_prepopulated,
-            'Add prepopulated (%)': self.add_prepopulated * per100,
-            'Add accepted': self.add_accepted,
-            'Add accepted/rejected': self.add_accepted / self.add_rejected,
-            'Add rejected': self.add_rejected,
-            'Move accepted': self.move_accepted,
-            'Move accepted/rejected': self.move_accepted / self.move_rejected,
-            'Move rejected': self.move_rejected,
             'Energy': self.energy,
             'Temperature': self.temperature,
+            'Coverage': self.coverage,
+            'Atom on surface': self.atoms_on_surface,
+            'Attempted moves': self.attempted_moves,
+            'Sucessful moves': self.successful_moves,
+            'Not moved moves': self.not_moved_moves,
+            'Blocked moves': self.blocked_moves,
+            'Lap': self.lap,
+            'Total steps': self.total_steps,
         }
 
     @property
@@ -118,7 +112,17 @@ class MonteCarloSimulation:
         return self.atoms_on_surface / len(self.occ)
 
     def run(self):
-        t = Timing('Running MC', nbsteps=self.max_laps)
+        t = Timing('Running MC', nbsteps=self.max_laps,
+                   tic_custom_fields=[
+                       ('Energy', 'g', 8),
+                       ('Temperature', 'g', 15),
+                       ('Coverage', 'g', 10),
+                       ('Atom on surface', 'd', 16),
+                       ('Attempted moves', 'd', 16),
+                       ('Sucessful moves', 'd', 16),
+                       ('Not moved moves', 'd', 16),
+                       ('Blocked moves', 'd', 16),
+                   ])
         self.save_init_state()
         while t.done < self.max_laps:
             self.lap = t.done
@@ -127,7 +131,8 @@ class MonteCarloSimulation:
             self.save_state()
             if self.create_image_queue is not None:
                 self.create_image_queue.put(self.lap)
-            t.tic()
+            stat = self.lap_info
+            t.tic(**stat)
         self.save_state()
         t.finished()
 
@@ -141,6 +146,7 @@ class MonteCarloSimulation:
                 self.add_atom()
             for i in range(self.moves_per_step*self.atoms_on_surface):
                 self.move_atom()
+            self.total_steps += 1
 
         #self.show(savefig=self.lap)
 
@@ -169,6 +175,8 @@ class MonteCarloSimulation:
         #prob = np.cumsum(self.occ, dtype=float)
         #prob /= prob[-1]
 
+        self.attempted_moves += 1
+
         #i = np.searchsorted(prob, np.random.uniform())
         i = np.random.choice(self.surface.sti[self.occ])
         nni = self.surface.nni[i]
@@ -176,6 +184,7 @@ class MonteCarloSimulation:
                 not np.any(self.occ[nni[:18]]) and
                 self.occ[i]):
             ## is surrounded
+            self.blocked_moves += 1
             return
 
         self.occ[i] = False
@@ -192,6 +201,10 @@ class MonteCarloSimulation:
         j = np.random.choice(self._nni, p=self._p)
         #j = not_occ_i[np.searchsorted(prob, np.random.uniform())]
 
+        if j != i:
+            self.successful_moves += 1
+        else:
+            self.not_moved_moves += 1
 
         if self.occ[j]:
             print('!!!!Moving to an occupied position!!!!')
@@ -205,6 +218,7 @@ class MonteCarloSimulation:
         self.keep_modification(self._nni)
         self.keep_modification([i,j])
         self.move_accepted += 1
+
 
         #
         #if self.accept():

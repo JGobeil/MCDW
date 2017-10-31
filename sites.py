@@ -13,22 +13,22 @@ class SitesGroup(list):
 
     @classmethod
     def fcc_hcp_111(cls):
-        fcc_conf = dict(
+        hcp_conf = dict(
             rel_pos=(1/np.sqrt(3.), 0,),
             prob=1,
-            #energy=-1.803,
-            energy=-0.020,
+            energy=-1.790,
+            #energy=-0.010,
         )
 
-        hcp_conf = dict(
+        fcc_conf = dict(
             rel_pos=(.5/np.sqrt(3.), -0.5),
             prob=1,
-            #energy=-1.790,
-            energy=-0.010,
+            energy=-1.803,
+            #energy=-0.020,
         )
 
-        fcc_name = ['fcc1', 'fcc2', 'fcc3']
-        hcp_name = ['hcp1', 'hcp2', 'hcp3']
+        fcc_name = ['fcc3', 'fcc1', 'fcc2']
+        hcp_name = ['hcp2', 'hcp3', 'hcp1']
 
         fcc_rcmod = [
             [(1, 2, 3, 3), (2, 2, 1, 3), ],
