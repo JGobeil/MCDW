@@ -245,7 +245,8 @@ class TimingWithBatchEstimator(Timing):
         if self.bs is not None:
             est = self.bs
         else:
-            est = int(np.ceil(self.tbt/self.tpu))
+            est = int(np.ceil(
+                self.tbt/((self.tics[-1] - self.tics[-2])/self.batchs[-1])))
 
         self.batchs.append(est)
         if self.nbsteps is not None and self.batch_size > self.todo:

@@ -1,68 +1,97 @@
+import argparse
+import os
 import subprocess
 from timing import Timing
-
-t = Timing('Building cython extension')
-rc = subprocess.run("python setup.py build_ext --inplace".split()).returncode
-t.finished()
-if rc != 0:
-    t.prt('Error when building extension')
-    exit(rc)
-
 import numpy as np
-import cmontecarlo
-import montecarlo
 
 from hexsurface import HexagonalDirectPosition
 from sites import SitesGroup
 from visualize import CreateImages
 
-pot = cmontecarlo.PotentialFuncNN(
-    conf = [
-         0.050,  # nn 1 ( x3 /  0: 3 ) fcc -> hcp
-         0.010,  # nn 2 ( x6 /  3: 9 ) fcc -> fcc
-        -0.050,  # nn 3 ( x3 /  9:12 ) fcc -> hcp
-        -0.090,  # nn 4 ( x6 / 12:18 ) fcc -> hcp
-        -0.103,  # nn 5 ( x6 / 18:24 ) fcc -> fcc (sqrt(3) x sqrt(3) R30)
-        -0.060,  # nn 6 ( x6 / 24:30 ) fcc -> fcc
-        -0.010,  # nn 7 ( x6 / 30:36 ) fcc -> hcp
-         0.100,  # nn 8 ( x3 / 36:39 ) fcc -> hcp
-        #-0.004,  # nn 9   fcc -> hcp
-        # nn 10+ ==> energy = 0
-    ],
-)
+if __name__ == "__main__":
+    t = Timing('Building cython extension')
+    rc = subprocess.run("python setup.py build_ext --inplace".split()).returncode
+    t.finished()
+    if rc != 0:
+        t.prt('Error when building extension')
+        exit(rc)
 
-s = HexagonalDirectPosition(
-    a = 0.362 / np.sqrt(2) / 2,
-    radius=70,
-    nn_radius=3,
-    sites=SitesGroup.fcc_hcp_111(),
-    load=True,
-    save=True,
-    load_and_save_dir='../sdb'
-)
+    import cmontecarlo
+    import montecarlo
 
-ci = CreateImages(read_path='cmc-test', write_path='cmc-test/img')
+    parser = argparse.ArgumentParser(description='Monte Carlo Domain Walls')
+    parser.add_argument(
+        'directories',
+        type=str,
+        nargs='+'
+    )
+    args = parser.parse_args()
 
-mc = montecarlo.MonteCarloSimulator(
-    surface=s,
-    nb_binding_sites=s.stlen,
-    lap_max=100,
-    steps_per_lap=500,
-    moves_per_step=5,
-    target_coverage=0.155,
-    potential_func=pot,
-    output_path='cmc-test',
-    temperature_func=lambda lap: 300 - lap*2,
-    create_image_queue=ci.queue,
-)
+    for path in args.directories:
+        conf_file = os.path.join(path, 'conf.py')
+        if not os.path.isfile(conf_file):
+            print("File %s not found in %s" % ('conf.py', path))
+            continue
 
-pot.set_surface(s)
-pot.set_simulator(mc)
+        t = Timing("Running MCDW in '%s'" % path)
+        exec(open(conf_file).read())
 
-if __name__ == '__main__':
-    ci.process.start()
-    mc.run()
-    print('Waiting for images processing...')
-    ci.process.join()
+        # ... quick and dirty
 
+        if pot_type == 'NN':
+            pot = cmontecarlo.PotentialFuncNN(conf=pot_conf)
+        else:
+            t.prt("Potential type unknown '%s'" % pot_type)
+
+        surface = HexagonalDirectPosition(
+            a = 0.362 / np.sqrt(2) / 2,
+            radius=surface_radius,
+            nn_radius=nn_radius,
+            sites=SitesGroup.fcc_hcp_111(
+                fcc_energy=sites_energy_conf['fcc'],
+                hcp_energy=sites_energy_conf['hcp'],
+            ),
+            load=True,
+            save=True,
+            load_and_save_dir=surface_db
+        )
+
+        states_path = os.path.join(path, 'states')
+        images_path = os.path.join(path, 'images')
+
+        if use_image_process == True:
+            ci = CreateImages(read_path=states_path, write_path=images_path)
+            ci_queue = ci.queue
+            ci.process.start()
+        else:
+            ci = None
+            ci_queue = None
+
+        mc = montecarlo.MonteCarloSimulator(
+            surface=surface,
+            nb_binding_sites=surface.stlen,
+            lap_max=lap_max,
+            steps_per_lap=steps_per_lap,
+            moves_per_step=moves_per_step,
+            target_coverage=target_coverage,
+            potential_func=pot,
+            output_path=states_path,
+            temperature_func=temperature,
+            create_image_queue=ci_queue,
+        )
+
+        pot.set_surface(surface)
+        pot.set_simulator(mc)
+
+        t.prt("Loading complete. Stating simulation. sites = %d" % surface.stlen)
+
+        mc.run()
+
+        if ci is not None:
+            print('Waiting for images processing...')
+            ci.process.join()
+
+        t.finished()
+
+        del pot, mc, surface
 

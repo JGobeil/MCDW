@@ -12,19 +12,17 @@ class SitesGroup(list):
         ).hexdigest()
 
     @classmethod
-    def fcc_hcp_111(cls):
+    def fcc_hcp_111(cls, fcc_energy, hcp_energy):
         hcp_conf = dict(
             rel_pos=(1/np.sqrt(3.), 0,),
             prob=1,
-            #energy=-1.790,
-            energy=-0.010,
+            energy=hcp_energy,
         )
 
         fcc_conf = dict(
             rel_pos=(.5/np.sqrt(3.), -0.5),
             prob=1,
-            #energy=-1.803,
-            energy=-0.020,
+            energy=fcc_energy
         )
 
         fcc_name = ['fcc3', 'fcc1', 'fcc2']

@@ -123,7 +123,7 @@ def geometric_cut_mask_old(px, py, radius, side=6, offangle=np.pi/2):
 
 def calculate_nn(stx, sty, nn_radius, idx_list=None,
                  time_per_batch=10,
-                 time_before_print=0):
+                 time_before_print=1):
     n = len(stx)
 
     nni = [None] * n  # indices of nn
