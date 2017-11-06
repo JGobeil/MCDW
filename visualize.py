@@ -20,13 +20,15 @@ default_colors_conf = {
     'hcp3': '#D98880',
 }
 
-class CreateImages(Process):
+class CreateImages:
     def __init__(self, read_path, write_path,
                  symbol=None,
                  symbol_scale=0.9,
                  colors_conf=None,
                  ):
-        super().__init__(target=CreateImages.wait_for_message, args=(self, ))
+        self.process = Process(
+            target=CreateImages._wait_for_message,
+            args=(self, ))
 
         self.queue = Queue()
 
@@ -44,7 +46,7 @@ class CreateImages(Process):
         self.canvas = FigureCanvasAgg(self.figure)
         self.axis = self.figure.add_subplot(111)
 
-    def wait_for_message(self):
+    def _wait_for_message(self):
         # canvas don't work in multiprocess !!
         self.canvas = FigureCanvasAgg(self.figure)
 
