@@ -8,6 +8,41 @@ from hexsurface import HexagonalDirectPosition
 from sites import SitesGroup
 from visualize import CreateImages
 
+class McdwConf:
+    def __init__(self):
+        pass
+
+class McdwPotentialConf:
+    """ Potential configuration
+    if name == 'NN':
+    Nearest neighbors potential
+    A potential that will use the NN shells to calculate the energy
+    The energy will be the sum of all atom present in a shell (NN1, NN2, ...)
+    for all defined energy. For example, if NN4=-1.0, NN5=-2.0 and there is
+    3 atoms in NN4 and 6 in NN6 the energy is 3*NN4 + 6*NN5 = -15 eV. Energies
+    are in eV.
+    Must define a  'nn_energy' list.
+
+    For reference:
+               Number of
+    NN Shell   atoms in shell   Transition
+    NN 1       3                fcc -> hcp
+    NN 2       6                fcc -> fcc
+    NN 3       3                fcc -> hcp
+    NN 4       6                fcc -> hcp
+    NN 5       6                fcc -> fcc  (sqrt(3) x sqrt(3) R30)
+    NN 6       6                fcc -> fcc
+    NN 7       6                fcc -> hcp
+    NN 9       3                fcc -> hcp
+    """
+
+    def __init__(self, name='NN', **kwargs):
+        if name == 'NN':
+            # Nearest neighbors potential
+            pass
+
+
+
 if __name__ == "__main__":
     t = Timing('Building cython extension')
     rc = subprocess.run("python setup.py build_ext --inplace".split()).returncode

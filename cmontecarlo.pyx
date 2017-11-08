@@ -7,9 +7,6 @@ cimport numpy as np
 
 cimport cython
 
-DEF MOVE_DEBUG = 0
-DEF ADD_DEBUG = 0
-
 np.import_array()
 
 from libc.stdio cimport printf
@@ -19,6 +16,7 @@ from libc.stdlib cimport rand
 from libc.stdlib cimport srand
 from libc.stdlib cimport RAND_MAX
 from libc.math cimport exp
+from libc.math cimport log
 
 ctypedef unsigned char bool_t
 ctypedef long long int_t
@@ -74,12 +72,14 @@ cdef class PotentialFuncNN(PotentialFunc):
         cdef float_t energy = 0.0
 
         cdef int_t* nni = &self.nni[index, 0]
-        cdef int_t i, nn_index
+        cdef int_t i, nn_index, count = 0
 
         for i in range(self.size):
-            nn_index = nni[i]
-            if self.occ[nn_index] > 0:
+            if self.occ[nni[i]] > 0:
                 energy += self.nn_energy[i]
+                count += 1
+            if count == 6:
+                break
         return energy + self.binding_energy[index]
 
 
@@ -111,6 +111,8 @@ cdef class CMonteCarloSimulator:
     cdef readonly int_t attempted_moves
     cdef readonly int_t successful_moves
     cdef readonly int_t not_moved_moves
+    cdef readonly int_t error_moves
+    cdef readonly int_t error_adds
 
     # sites informations
     cdef int_t* filled
@@ -119,6 +121,8 @@ cdef class CMonteCarloSimulator:
     # cache (I'm not sure if this help)
     cdef int_t* _move_cache_nni
     cdef float_t* _move_cache_p
+
+    cdef float_t* _energies_buffer
 
     def __cinit__(self,
                   int_t nb_binding_sites,
@@ -148,9 +152,12 @@ cdef class CMonteCarloSimulator:
         self.attempted_moves = 0
         self.successful_moves = 0
         self.not_moved_moves = 0
+        self.error_moves = 0
+        self.error_adds = 0
 
         self.filled = <int_t*>malloc(self.n_max * sizeof(int_t))
         self.occ = <int_t*>malloc(self.n_max * sizeof(int_t))
+        self._energies_buffer = <float_t*>malloc(self.n_max * sizeof(float_t))
 
         cdef int_t i
         for i in range(self.n_max):
@@ -160,6 +167,7 @@ cdef class CMonteCarloSimulator:
         self._move_cache_nni = <int_t*>malloc(4 * sizeof(int_t))
         self._move_cache_p = <float_t*>malloc(4 * sizeof(float_t))
 
+
         # fixed seed for testing
         srand(201)
 
@@ -168,6 +176,7 @@ cdef class CMonteCarloSimulator:
         free(self.occ)
         free(self._move_cache_nni)
         free(self._move_cache_p)
+        free(self._energies_buffer)
 
     def __init__(self,
                  surface,
@@ -192,13 +201,6 @@ cdef class CMonteCarloSimulator:
         return abs(self.occ[site_index]) - 1
 
     cdef void add_atom(self, int_t site_index):
-        IF ADD_DEBUG:
-            print("Adding %5d" % site_index)
-            print(" Before")
-            print("  occ[site_index] = %5d" % self.occ[site_index])
-            print("  filled_site_index = %5d" % self.filled_indexof(site_index))
-            print("  filled[filled_site_index]  = %5d" % self.filled[self.filled_indexof(site_index)])
-
         cdef int_t tmp_site_index = self.filled[self.n_used]
         cdef int_t filled_add_index = self.filled_indexof(site_index)
 
@@ -212,25 +214,7 @@ cdef class CMonteCarloSimulator:
         self.n_free -= 1
         self.coverage =  self.n_used / <float_t>self.n_max
 
-
-        IF ADD_DEBUG:
-            print(" After")
-            print("  occ[site_index] = %5d" % self.occ[site_index])
-            print("  filled_site_index = %5d" % self.filled_indexof(site_index))
-            print("  filled[filled_site_index]  = %5d" % self.filled[self.filled_indexof(site_index)])
-            print("  filled[tmp_site_index]  = %5d" % self.filled[self.filled_indexof(tmp_site_index)])
-
     cdef void move_atom(self, int_t site_src, int_t site_dst):
-        IF MOVE_DEBUG:
-            print("Moving %5d -> %5d" % (site_src, site_dst))
-            print(" Before")
-            print("  occ[site_src] = %5d" % self.occ[site_src])
-            print("  occ[site_dst] = %5d" % self.occ[site_dst])
-            print("  filled_src_index = %5d" % self.filled_indexof(site_src))
-            print("  filled_dst_index = %5d" % self.filled_indexof(site_dst))
-            print("  filled[src_index]  = %5d" % self.filled[self.filled_indexof(site_src)])
-            print("  filled[dst_index]  = %5d" % self.filled[self.filled_indexof(site_dst)])
-
         cdef int_t filled_src_index = self.filled_indexof(site_src)
         cdef int_t filled_dst_index = self.filled_indexof(site_dst)
 
@@ -240,19 +224,11 @@ cdef class CMonteCarloSimulator:
         self.filled[filled_src_index] = site_dst
         self.filled[filled_dst_index] = site_src
 
-        IF MOVE_DEBUG:
-            print(" After")
-            print("  occ[site_src] = %5d" % self.occ[site_src])
-            print("  occ[site_dst] = %5d" % self.occ[site_dst])
-            print("  filled_src_index = %5d" % self.filled_indexof(site_src))
-            print("  filled_dst_index = %5d" % self.filled_indexof(site_dst))
-            print("  filled[src_index]  = %5d" % self.filled[self.filled_indexof(site_src)])
-            print("  filled[dst_index]  = %5d" % self.filled[self.filled_indexof(site_dst)])
-
     cdef void add_random_atom(self):
         # get a list of landing position available
         if self.n_free == 0:
             printf("!!! Surface totally saturated. Something is wrong !!!")
+            self.error_adds += 10000
             return
 
         # chose a free site
@@ -269,9 +245,8 @@ cdef class CMonteCarloSimulator:
                 self.add_atom(site)
                 return
             can_land = True
-        printf('!!! Cannot find a nice spot for landing. Crash landing. !!!')
-        site = self.filled[(rand() % self.n_free) + self.n_used]
-        self.add_atom(site)
+        printf('!!! Cannot find a nice spot for landing. Atom rejected.\n !!!')
+        self.error_adds += 1
 
     cdef int_t move_random_atom(self):
         self.attempted_moves += 1
@@ -295,40 +270,48 @@ cdef class CMonteCarloSimulator:
 
         cdef int_t i, j
         # calculate the probability
-        for i in range(4):
-            j = nni[i]
-            if self.occ[j] > 0:
+
+        p[0] = self.potential_func.get_energy(src)
+        for i in [1, 2, 3]:
+            if self.occ[nni[i]] > 0:
                 # site is occupied
                 p[i] = 0
             else:
                 # site is free
-                p[i] = exp(-self.potential_func.get_energy(j)/self.kBT)
+                #p[i] = exp(-self.potential_func.get_energy(j)/self.kBT)
+                p[i] = exp(-(self.potential_func.get_energy(nni[i]) - p[0])
+                    / self.kBT)
 
-        for i in range(1, 4):
-            p[i] += p[i-1]
-
-        for i in range(4):
-            p[i] /= p[3]
+        #p[0] = 1
+        p[1] += 1
+        p[2] += p[1]
+        p[3] += p[2]
 
         if p[3] == 0:
             printf('!!! No place to move !!!\n')
+            self.error_moves += 1
             return -1
 
-        # chose destination
 
-        # get a random value between [0, 1[
-        cdef float_t r = <float_t>rand() / (<float_t>RAND_MAX + 1)
+        p[0] = 1 / p[3]
+        p[1] /= p[3]
+        p[2] /= p[3]
+        #p[3] /= p[3]
+
+        # chose destination
+        # get a random value between [0, 1]
+        cdef float_t r = <float_t>rand() / <float_t>RAND_MAX
         cdef int_t dst
-        if r < p[1]:
-            if r < p[0]:
-                dst = nni[0]
-            else:
-                dst = nni[1]
-        else:
-            if r < p[2]:
-                dst = nni[2]
-            else:
+        if r > p[1]:
+            if r > p[2]:
                 dst = nni[3]
+            else:
+                dst = nni[2]
+        else:
+            if r > p[0]:
+                dst = nni[1]
+            else:
+                dst = nni[0]
 
         if self.occ[dst] > 0:
             printf('!!! Moving to an occupied position !!!\n')
@@ -336,6 +319,10 @@ cdef class CMonteCarloSimulator:
             printf("  p=[%7g %7g %7g %7g]\n", p[0], p[1], p[2], p[3])
             printf("  nni=[%5d %5d %5d %5d]\n", nni[0], nni[1], nni[2], nni[3])
             printf("  r=%g\n", r )
+            for i in range(4):
+                p[i] = self.potential_func.get_energy(nni[i])
+            printf("  e=[%7g %7g %7g %7g]\n", p[0], p[1], p[2], p[3])
+            self.error_moves += 1
 
         # put back the atom
         self.occ[src] = -self.occ[src]
@@ -349,7 +336,7 @@ cdef class CMonteCarloSimulator:
 
     cpdef float_t get_total_energy(self):
         cdef int_t size = self.n_used
-        cdef float_t[:] buff = np.empty(size)
+        cdef float_t* buff = self._energies_buffer
         cdef int_t left = 0
 
         cdef int_t i

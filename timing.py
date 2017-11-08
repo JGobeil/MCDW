@@ -63,37 +63,40 @@ class Timing:
         if nbsteps is None:
             self.nbsteps = 0
             tic_format = [
-                ('Done', 'd', 8),
-                ('TPU', 's', 10),
-                ('Average TPU', 's', 10),
-                ('Elapsed time', 's', 14), ]
+                ('Done', '%6d', 8),
+                ('TPU', '%9s', 10),
+                ('Average TPU', '%9s', 10),
+                ('Elapsed time', '%12s', 14), ]
             self.prt('%s' % self.name, start=True)
         else:
             self.nbsteps = nbsteps
             tic_format = [
-                ('Done', 'd', 8),
-                #('Todo', 'd', 14),
-                ('Time left', 's', 14),
-                ('Elapsed time', 's', 14),
-                ('Total time', 's', 14),
-                ('TPU', 's', 10),
+                ('Done', '%6d', 8),
+                ('Time left', '%12s', 14),
+                ('Elapsed time', '%12s', 14),
+                ('Total time', '%12s', 14),
+                ('TPU', '%8s', 10),
                 #('Average TPU', 's', 10),
             ]
             self.prt('%s (steps = %d)' % (self.name, self.nbsteps),
                      start=True)
 
         if tic_custom_fields is not None:
-            tic_format += tic_custom_fields
+            tic_format = tic_custom_fields
 
         self.header = ' '.join([(('%%%ds' % size) % name)
-                                for name, typpe, size in tic_format])
+                                for name, fmt, size in tic_format])
 
-        self.tic_fmt = ' '.join([('{%s:>%d%s}' % (name, size, typpe))
-                                 for name, typpe, size in tic_format]
-                                ).format
+        self.tic_format = tic_format
 
         self.tics = [perf_counter(), ]
         Timing.level += 1
+
+    def get_tic_str(self, params):
+        return ' '.join([
+            ('%%%ds' % size) % (fmt % params[name]) for
+            name, fmt, size in self.tic_format
+        ])
 
     @property
     def done(self):
@@ -146,7 +149,7 @@ class Timing:
             self.first_print = False
             self.prt(self.header)
 
-        self.prt(self.tic_fmt(**stat))
+        self.prt(self.get_tic_str(stat))
 
     @property
     def stat(self):
@@ -260,4 +263,4 @@ class TimingWithBatchEstimator(Timing):
                 self.first_print = False
                 self.prt(self.header)
 
-            self.prt(self.tic_fmt(**stat))
+            self.prt(self.get_tic_str(stat))

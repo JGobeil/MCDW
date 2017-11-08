@@ -2,8 +2,11 @@ from multiprocessing import Process
 from multiprocessing import Queue
 from types import SimpleNamespace
 import numpy as np
+import pandas as pd
 import os
 from glob import glob
+
+import json
 
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_agg import FigureCanvasAgg
@@ -102,6 +105,8 @@ class CreateImages:
             self.load_surface()
 
         occ = np.load(os.path.join(self.read_path, 'occ_%.10d.npy' % i))
+        with open(os.path.join(self.read_path, "lap_%.10d.json" % i), 'r') as f:
+            stat = json.load(f)
 
         if self.symbol == 'scatter':
             x = self.surface.x[occ]
@@ -117,6 +122,37 @@ class CreateImages:
 
         self.axis.set_xlim(self.surface.xlim)
         self.axis.set_ylim(self.surface.ylim)
+
+        fmt = '{:15s} {:>12s}'.format
+        values_left = [
+            ('Lap:', '%-d' % stat['Lap']),
+            ('Temperature:', '%-.2f K' % stat['T']),
+            ('Energy:', '%-.6g eV' % stat['Energy']),
+            ('Coverage:', '%-.4g' % stat['Coverage']),
+        ]
+
+        values_right = [
+            ('Atoms:', '%-d' % stat['Atoms']),
+            ('Moves tried:', '%-d' % stat['Moves tried']),
+            ('Moved:', '%-d' % stat['Moved']),
+            ('Not moved:', '%-d' % stat['Not moved']),
+        ]
+
+        if stat['Error adds'] > 0:
+            values_right.append(('Error adds', '-%d' % stat['Error adds']))
+
+        if stat['Error moves'] > 0:
+            values_right.append(('Error moves', '-%d' % stat['Error moves']))
+
+        self.axis.set_title(
+            '\n'.join([fmt(*v) for v in values_left]),
+            fontname='monospace',
+            loc='left')
+
+        self.axis.set_title(
+            '\n'.join([fmt(*v) for v in values_right]),
+            fontname='monospace',
+            loc='right')
 
         fn = os.path.join(self.write_path, "%.10i.png" % i)
         self.figure.savefig(fn)

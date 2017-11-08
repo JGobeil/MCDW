@@ -2,15 +2,9 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.patches import RegularPolygon
-import numexpr as ne
-import pandas as pd
+import json
 
 from timing import Timing
-from timing import TimingWithBatchEstimator
-from hexsurface import HexagonalDirectPosition
-from sites import SitesGroup
-from utils import sizeof_fmt
-
 import cmontecarlo
 
 kB = 8.6173303e-5 # boltzmann contant in eV/K
@@ -55,43 +49,50 @@ class MonteCarloSimulator(cmontecarlo.CMonteCarloSimulator):
     def lap_info(self):
         return {
             'Energy': self.get_total_energy(),
-            'Temperature': self.temperature,
-            'Coverage': self.coverage,
-            'Atom on surface': self.n_used,
-            'Attempted moves': self.attempted_moves,
-            'Sucessful moves': self.successful_moves,
-            'Not moved moves': self.not_moved_moves,
+            'T': self.temperature,
+            'Coverage': self.coverage * 6,
+            'Atoms': self.n_used,
+            'Moves tried': self.attempted_moves,
+            'Moved': self.successful_moves,
+            'Not moved': self.not_moved_moves,
+            'Error moves': self.error_moves,
+            'Error adds': self.error_adds,
             #'Blocked moves': self.blocked_moves,
             'Lap': self.lap,
             #'Total steps': self.total_steps,
         }
 
-    @property
-    def boltzmann_T(self):
-        #return 1/(8.6173303e-5 * self.temperature)
-        return 11604.5221105 / self.temperature
 
     def run(self):
         t = Timing('Running MC', nbsteps=self.lap_max,
                    tic_custom_fields=[
-                       ('Energy', 'g', 10),
-                       ('Temperature', 'g', 12),
-                       ('Coverage', 'g', 10),
-                       ('Atom on surface', 'd', 16),
-                       ('Attempted moves', 'd', 16),
-                       ('Sucessful moves', 'd', 16),
-                       ('Not moved moves', 'd', 16),
-        #               #('Blocked moves', 'd', 16),
+                       ('Lap', '%5d', 6),
+                       ('Time left', '%12s', 14),
+                       ('Elapsed time', '%12s', 14),
+                       ('Energy', '%8g', 12),
+                       ('T', '%.2f', 8),
+                       ('Coverage', '%.4g', 10),
+                       ('Atoms', '%6d', 12),
+                       ('Moves tried', '%10d', 12),
+                       ('Moved', '%10d', 12),
+                       ('Not moved', '%10d', 12),
+                       ('Error moves', '%6d', 12),
+                       ('Error adds', '%6d', 12),
                    ])
         self.save_init_state()
         for i in range(self.lap_max):
             self.temperature = self.temperature_func(self.lap)
             self.run_lap()
-            self.save_state()
+
+            stat = self.lap_info
+            self.save_state(stat)
+
+            t.tic(**stat)
+
             if self.create_image_queue is not None:
                 self.create_image_queue.put(self.lap)
-            stat = self.lap_info
-            t.tic(**stat)
+
+
         self.save_state()
         t.finished()
 
@@ -109,15 +110,28 @@ class MonteCarloSimulator(cmontecarlo.CMonteCarloSimulator):
                             a=self.surface.a,
                             )
 
+        self.save_stat()
         #t.prt('File saved ( %s )' % sizeof_fmt(fn))
         #t.finished()
 
-    def save_state(self):
+    def save_stat(self, lap_info=None):
+        if lap_info is None:
+            lap_info = self.lap_info
+
+        fn = os.path.join(self.outpath, "lap_%.10d.json" % self.lap)
+        with open(fn, 'w') as f:
+            json.dump(lap_info, f)
+
+    def save_state(self, lap_info=None):
         fn = os.path.join(self.outpath, "occ_%.10d.npy" % self.lap)
         #t = Timing('Saving to %s' % fn)
         np.save(fn, self.occupancy)
         #t.prt('File saved ( %s )' % sizeof_fmt(fn))
         #t.finished()
+
+        self.save_stat(lap_info)
+
+
 
     def show(self,
              savefig=None,
