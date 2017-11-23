@@ -33,7 +33,7 @@ cdef class PotentialFunc:
     def __init__(self, *args, **kwargs):
         pass
 
-cdef class PotentialFuncNN(PotentialFunc):
+cdef class PotentialFuncNN6(PotentialFunc):
     cdef int_t [:, :] nni  # list of nn index for each position
     cdef int_t [:] occ  # occupancy of the surface
     cdef float_t [:] nn_energy  # nn energies
@@ -43,7 +43,7 @@ cdef class PotentialFuncNN(PotentialFunc):
 
     cdef object sim
 
-    def __cinit__(self, conf, int_t size = 39, *args, **kwargs):
+    def __cinit__(self, nn_energy, int_t size = 39, *args, **kwargs):
 
         self.nn_count = np.array([3, 6, 3, 6, 6, 6, 6, 3, 6, 12, 3],
                                  dtype=np.int64)
@@ -52,7 +52,7 @@ cdef class PotentialFuncNN(PotentialFunc):
 
         cdef int_t i, j, n=0
         cdef float_t e
-        for i, energy in enumerate(conf):
+        for i, energy in enumerate(nn_energy):
             for j in range(self.nn_count[i]):
                 if n < self.size:
                     self.nn_energy[n] = energy
@@ -80,6 +80,65 @@ cdef class PotentialFuncNN(PotentialFunc):
                 count += 1
             if count == 6:
                 break
+        return energy + self.binding_energy[index]
+
+cdef class PotentialFuncNN6_EmptyEnergy(PotentialFuncNN6):
+    cdef float_t empty_energy
+
+    def __cinit__(self, float_t empty_energy, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.empty_energy = empty_energy
+
+    cdef float_t get_energy(self, int_t index):
+        cdef float_t energy = 0.0
+
+        cdef int_t* nni = &self.nni[index, 0]
+        cdef int_t i, nn_index, count = 0
+
+        for i in range(self.size):
+            if self.occ[nni[i]] > 0:
+                energy += self.nn_energy[i]
+                count += 1
+            else:
+                if i > 23:
+                    energy += self.empty_energy
+            if count == 6:
+                break
+        return energy + self.binding_energy[index]
+
+
+cdef class PotentialFuncNN6_EmptyEnergy_2(PotentialFuncNN6_EmptyEnergy):
+    cdef float_t get_energy(self, int_t index):
+        cdef float_t energy = 0.0
+
+        cdef int_t* nni = &self.nni[index, 0]
+        cdef int_t i, nn_index, count = 0
+
+        for i in range(self.size):
+            if self.occ[nni[i]] > 0:
+                if count < 6:
+                    energy += self.nn_energy[i]
+                    count += 1
+            else:
+                if i > 23:
+                    energy += self.nn_energy[i] * self.empty_energy
+        return energy + self.binding_energy[index]
+
+
+cdef class PotentialFuncNN6_EmptyEnergy_3(PotentialFuncNN6_EmptyEnergy):
+    cdef float_t get_energy(self, int_t index):
+        cdef float_t energy = 0.0
+
+        cdef int_t* nni = &self.nni[index, 0]
+        cdef int_t i, nn_index, count = 0
+
+        for i in range(self.size):
+            if self.occ[nni[i]] > 0:
+                if count < 6:
+                    energy += self.nn_energy[i]
+                    count += 1
+            else:
+                energy += self.empty_energy
         return energy + self.binding_energy[index]
 
 

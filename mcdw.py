@@ -45,7 +45,7 @@ class McdwPotentialConf:
 
 if __name__ == "__main__":
     t = Timing('Building cython extension')
-    rc = subprocess.run("python setup.py build_ext --inplace".split()).returncode
+    rc = subprocess.run("python3 setup.py build_ext --inplace".split()).returncode
     t.finished()
     if rc != 0:
         t.prt('Error when building extension')
@@ -73,8 +73,14 @@ if __name__ == "__main__":
 
         # ... quick and dirty
 
-        if pot_type == 'NN':
-            pot = cmontecarlo.PotentialFuncNN(conf=pot_conf)
+        if pot_type in ['NN', 'NN6']:
+            pot = cmontecarlo.PotentialFuncNN6(**pot_conf)
+        elif pot_type in ['NN6_EmptyEnergy']:
+            pot = cmontecarlo.PotentialFuncNN6_EmptyEnergy(**pot_conf)
+        elif pot_type in ['NN6_EmptyEnergy_2']:
+            pot = cmontecarlo.PotentialFuncNN6_EmptyEnergy_2(**pot_conf)
+        elif pot_type in ['NN6_EmptyEnergy_3']:
+            pot = cmontecarlo.PotentialFuncNN6_EmptyEnergy_3(**pot_conf)
         else:
             t.prt("Potential type unknown '%s'" % pot_type)
 
