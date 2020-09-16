@@ -2,7 +2,7 @@
 
 Code for Monte Carlo simulations of domain walls formation on Cu2N/Cu(111).
 
-See file run1/mcdw.py for example on how to run the code.
+See files example1/conf.py and example2/conf.py for example on how to run the code.
 
 ## Features
 
